@@ -3,24 +3,30 @@
 #![feature(type_alias_impl_trait)]
 #![feature(async_fn_in_trait)]
 #![allow(incomplete_features)]
+#[macro_use]
+extern crate alloc;
 
-use core::str::from_utf8;
 use core::cell::RefCell;
+use core::mem::MaybeUninit;
 
 use cyw43_pio::PioSpi;
-use defmt::*;
 use embassy_executor::Spawner;
 use embassy_net::tcp::TcpSocket;
 use embassy_net::{Config, Stack, StackResources};
 use embassy_time::Timer;
 use embassy_time::Duration;
 use embassy_rp::gpio::{Level, Output};
-use embassy_rp::peripherals::{DMA_CH0, PIN_23, PIN_25, PIO0};
+use embassy_rp::bind_interrupts;
+use embassy_rp::peripherals::{DMA_CH0, PIN_23, PIN_25, PIO0, USB};
+use embassy_rp::usb::{Driver, InterruptHandler};
 use embassy_rp::pio::Pio;
 use embassy_sync::blocking_mutex::{Mutex, raw::ThreadModeRawMutex};
-use embedded_io::asynch::Write;
+use embedded_alloc::Heap;
 use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
+
+mod rest;
+use crate::rest::Rest;
 
 macro_rules! singleton {
     ($val:expr) => {{
@@ -30,6 +36,11 @@ macro_rules! singleton {
     }};
 }
 
+bind_interrupts!(struct Irqs {
+    USBCTRL_IRQ => InterruptHandler<USB>;
+});
+
+
 // Onboard LED Status
 #[derive(Copy, Clone)]
 enum LedStatus
@@ -38,9 +49,20 @@ enum LedStatus
     Running,
     Error,
 }
+
+//
+// static variables
+//
 static LED_STATUS : Mutex<ThreadModeRawMutex, RefCell<LedStatus>> = Mutex::new(RefCell::new(LedStatus::Stop));
 
+const HEAP_SIZE : usize = 1024 * 32;     // 32KiB 
+static mut HEAP_MEM : [MaybeUninit<u8>; HEAP_SIZE] = [MaybeUninit::uninit(); HEAP_SIZE];
+#[global_allocator]
+static HEAP : Heap = Heap::empty();
 
+//
+// Tasks
+//
 #[embassy_executor::task]
 async fn wifi_task(
     runner: cyw43::Runner<'static, Output<'static, PIN_23>, PioSpi<'static, PIN_25, PIO0, 0, DMA_CH0>>,
@@ -51,6 +73,11 @@ async fn wifi_task(
 #[embassy_executor::task]
 async fn net_task(stack: &'static Stack<cyw43::NetDriver<'static>>) -> ! {
     stack.run().await
+}
+
+#[embassy_executor::task]
+async fn logger_task(driver: Driver<'static, USB>) {
+    embassy_usb_logger::run!(1024, log::LevelFilter::Info, driver);
 }
 
 #[embassy_executor::task]
@@ -93,11 +120,19 @@ async fn led_task(mut control: cyw43::Control<'static>) -> !
 }
 
 #[embassy_executor::main]
-async fn main( spawner: Spawner )
+async fn main(spawner: Spawner)
 {
-    info!("Hello World!");
+    // Initialize the allocator BEFORE use it
+    {
+        unsafe { HEAP.init(HEAP_MEM.as_ptr() as usize, HEAP_SIZE) }
+    }
 
     let p = embassy_rp::init(Default::default());
+
+    let usb_driver = Driver::new(p.USB, Irqs);
+    spawner.spawn(logger_task(usb_driver)).unwrap();
+
+    log::info!("Hello World!");
 
     let fw = include_bytes!("../../cyw43/firmware/43439A0.bin");
     let clm = include_bytes!("../../cyw43/firmware/43439A0_clm.bin");
@@ -116,7 +151,7 @@ async fn main( spawner: Spawner )
 
     let state = singleton!(cyw43::State::new());
     let (net_device, mut control, runner) = cyw43::new(state, pwr, spi, fw).await;
-    unwrap!(spawner.spawn(wifi_task(runner)));
+    spawner.spawn(wifi_task(runner)).unwrap();
 
     control.init(clm).await;
     control
@@ -141,66 +176,44 @@ async fn main( spawner: Spawner )
         seed
     ));
 
-    unwrap!(spawner.spawn(net_task(stack)));
+    spawner.spawn(net_task(stack)).unwrap();
 
     loop {
         //control.join_open(env!("WIFI_NETWORK")).await;
         match control.join_wpa2(env!("WIFI_NETWORK"), env!("WIFI_PASSWORD")).await {
             Ok(_) => break,
             Err(err) => {
-                info!("join failed with status={}", err.status);
+                log::info!("join failed with status={}", err.status);
             }
         }
     }
     
     // Start LED task
-    unwrap!( spawner.spawn(led_task(control)) );
+    spawner.spawn(led_task(control)).unwrap();
     LED_STATUS.lock(|lock| {
         *lock.borrow_mut() = LedStatus::Running;
     });
 
     // And now we can use it!
-
     let mut rx_buffer = [0; 4096];
     let mut tx_buffer = [0; 4096];
-    let mut buf = [0; 4096];
-
     loop {
         let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
-        socket.set_timeout(Some(embassy_net::SmolDuration::from_secs(10)));
+        socket.set_timeout(Some(embassy_time::Duration::from_secs(10)));
 
-        //control.gpio_set(0, false).await;
-        info!("Listening on TCP:1234...");
-        if let Err(e) = socket.accept(1234).await {
-            warn!("accept error: {:?}", e);
+        log::info!("Listening on TCP:80..");
+        if let Err(e) = socket.accept(80).await {
+            log::warn!("Listening timeout : {:?}", e);
             continue;
         }
 
-        info!("Received connection from {:?}", socket.remote_endpoint());
-        //control.gpio_set(0, true).await;
-
-        loop {
-            let n = match socket.read(&mut buf).await {
-                Ok(0) => {
-                    warn!("read EOF");
-                    break;
-                }
-                Ok(n) => n,
-                Err(e) => {
-                    warn!("read error: {:?}", e);
-                    break;
-                }
-            };
-
-            info!("rxd {}", from_utf8(&buf[..n]).unwrap());
-
-            match socket.write_all(&buf[..n]).await {
-                Ok(()) => {}
-                Err(e) => {
-                    warn!("write error: {:?}", e);
-                    break;
-                }
-            };
+        log::info!("Received connection from {:?}", socket.remote_endpoint());
+        
+        {
+            let mut server = Rest::new(socket);
+            if let Err(s) = server.do_rest_service().await {
+                log::warn!("{}", s.as_str());
+            }
         }
     }
 }

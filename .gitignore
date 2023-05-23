@@ -1,2 +1,3 @@
 appsrc/target/*
 appsrc/memory.map
+appsrc/setup_wifi.bat
