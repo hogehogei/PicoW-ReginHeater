@@ -197,23 +197,18 @@ async fn main(spawner: Spawner)
     // And now we can use it!
     let mut rx_buffer = [0; 4096];
     let mut tx_buffer = [0; 4096];
+
     loop {
         let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
-        socket.set_timeout(Some(embassy_time::Duration::from_secs(10)));
+        let mut server = Rest::new(socket);
 
-        log::info!("Listening on TCP:80..");
-        if let Err(e) = socket.accept(80).await {
-            log::warn!("Listening timeout : {:?}", e);
+        if let Err(s) = server.accept().await {
+            log::warn!("{}", s.as_str());
             continue;
         }
-
-        log::info!("Received connection from {:?}", socket.remote_endpoint());
-        
-        {
-            let mut server = Rest::new(socket);
-            if let Err(s) = server.do_rest_service().await {
-                log::warn!("{}", s.as_str());
-            }
+        if let Err(s) = server.do_rest_service().await {
+            log::warn!("{}", s.as_str());
         }
+        server.close().await;
     }
 }
