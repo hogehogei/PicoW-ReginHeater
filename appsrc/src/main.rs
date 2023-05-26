@@ -15,10 +15,11 @@ use embassy_net::tcp::TcpSocket;
 use embassy_net::{Config, Stack, StackResources};
 use embassy_time::Timer;
 use embassy_time::Duration;
-use embassy_rp::gpio::{Level, Output};
+use embassy_rp::gpio::{Level, Output, Pin};
 use embassy_rp::bind_interrupts;
-use embassy_rp::peripherals::{DMA_CH0, PIN_23, PIN_25, PIO0, USB};
+use embassy_rp::peripherals::{DMA_CH0, PIN_23, PIN_25, PIN_26, PIN_27, PIO0, USB};
 use embassy_rp::usb::{Driver, InterruptHandler};
+use embassy_rp::adc::Adc;
 use embassy_rp::pio::Pio;
 use embassy_sync::blocking_mutex::{Mutex, raw::ThreadModeRawMutex};
 use embedded_alloc::Heap;
@@ -26,7 +27,9 @@ use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
 
 mod rest;
+mod thermometer;
 use crate::rest::Rest;
+use crate::thermometer::*;
 
 macro_rules! singleton {
     ($val:expr) => {{
@@ -38,6 +41,7 @@ macro_rules! singleton {
 
 bind_interrupts!(struct Irqs {
     USBCTRL_IRQ => InterruptHandler<USB>;
+    ADC_IRQ_FIFO => embassy_rp::adc::InterruptHandler;
 });
 
 
@@ -129,8 +133,14 @@ async fn main(spawner: Spawner)
 
     let p = embassy_rp::init(Default::default());
 
+    // Start USB logger task
     let usb_driver = Driver::new(p.USB, Irqs);
     spawner.spawn(logger_task(usb_driver)).unwrap();
+
+    // Start thermomater(Heater, CPU)
+    let mut adc = Adc::new(p.ADC, Irqs, embassy_rp::adc::Config::default());
+    let mut adcio = ADCIo::new(adc, p.PIN_26, p.PIN_27);
+    spawner.spawn(thermometer_task(adcio)).unwrap();
 
     log::info!("Hello World!");
 

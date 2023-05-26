@@ -1,0 +1,1 @@
+(Get-Content -Path ./temptable.csv) | ForEach-Object{ "$_," }

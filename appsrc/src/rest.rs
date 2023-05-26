@@ -8,6 +8,8 @@ use embassy_net::tcp::{State, AcceptError};
 use embedded_io::asynch::Write;
 use alloc::string::{String, ToString};
 
+use crate::thermometer::*;
+
 pub struct Rest<'a>
 {
     socket: TcpSocket<'a>,
@@ -162,7 +164,7 @@ fn response_get<'a>(request: &httparse::Request<'a, 'a>) -> Result<String, Strin
 
 fn rest_response_tempareture_heater() -> Result<String, String>
 {
-    let json = format!("{{\"heater_temp\":[{}]}}", 25.0);
+    let json = format!("{{\"heater_temp\":[{:.2}]}}", 25.0);
     log::info!("rest_response_tempareture_heater: {}", json.as_str());
 
     Ok(json)
@@ -170,7 +172,7 @@ fn rest_response_tempareture_heater() -> Result<String, String>
 
 fn rest_response_tempareture_cpu() -> Result<String, String>
 {
-    let json = format!("{{\"cpu_temp\":[{}]}}", 60.0);
+    let json = format!("{{\"cpu_temp\":[{:.2}]}}", cpu_tempareture());
     log::info!("rest_response_tempareture_cpu(): {}", json.as_str());
 
     Ok(json)
