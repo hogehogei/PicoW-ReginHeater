@@ -4,11 +4,11 @@ use defmt::*;
 use embassy_time::Timer;
 use embassy_time::Duration;
 use embassy_net::tcp::TcpSocket;
-use embassy_net::tcp::{State, AcceptError};
 use embedded_io::asynch::Write;
 use alloc::string::{String, ToString};
 
 use crate::thermometer::*;
+use crate::controller::*;
 
 pub struct Rest<'a>
 {
@@ -47,7 +47,7 @@ impl<'a> Rest<'a>
                     if let Some(json_response) = opt {
                         // OK, parsing complete and get response.
                         match self.socket.write_all(&json_response.as_bytes()).await {
-                            Ok(size) => {
+                            Ok(()) => {
                                 // response complete!
                                 log::info!("REST Response succeeded: TCPstatus[{}]\n{}", 
                                     get_tcp_state_string(self.socket.state()).as_str(), 
@@ -127,12 +127,11 @@ async fn create_rest_response(buf: &[u8]) -> Result<Option<String>, String>
         return Ok(None);
     }
 
-    match response(&request) {
-        Ok(json) => {
-            Ok(Some(format!("HTTP/1.1 200 OK\r\n\r\n{}", json)))
+    response(&request).map(
+        |json| {
+            Some(format!("HTTP/1.1 200 OK\r\n\r\n{{{}}}", json))
         }
-        Err(e) => Err(e)
-    }
+    )
 }
 
 fn response<'a>(request: &httparse::Request<'a, 'a>) -> Result<String, String>
@@ -156,6 +155,15 @@ fn response_get<'a>(request: &httparse::Request<'a, 'a>) -> Result<String, Strin
         "/tempareture/cpu" => {
             rest_response_tempareture_cpu()
         }
+        "/tempareture/all" => {
+            rest_response_tempareture_all()
+        }
+        "/status" => {
+            rest_response_status()
+        }
+        "/details" => {
+            rest_response_details()
+        }
         _ => { 
             Ok(r#"{"error":"invalid request"}"#.to_string())
         }
@@ -164,7 +172,8 @@ fn response_get<'a>(request: &httparse::Request<'a, 'a>) -> Result<String, Strin
 
 fn rest_response_tempareture_heater() -> Result<String, String>
 {
-    let json = format!("{{\"heater_temp\":[{:.2}]}}", 25.0);
+    let tempareture = heater1_tempareture();
+    let json = format!("\"heater_temp\":[{:.2}]", tempareture);
     log::info!("rest_response_tempareture_heater: {}", json.as_str());
 
     Ok(json)
@@ -172,13 +181,53 @@ fn rest_response_tempareture_heater() -> Result<String, String>
 
 fn rest_response_tempareture_cpu() -> Result<String, String>
 {
-    let json = format!("{{\"cpu_temp\":[{:.2}]}}", cpu_tempareture());
+    let json = format!("\"cpu_temp\":[{:.2}]", cpu_tempareture());
     log::info!("rest_response_tempareture_cpu(): {}", json.as_str());
 
     Ok(json)
 }
 
-fn get_tcp_state_string(state: State) -> String
+fn rest_response_tempareture_all() -> Result<String, String>
+{
+    let heater_json = rest_response_tempareture_heater()?;
+    let cpu_json = rest_response_tempareture_cpu()?;
+
+    let json = format!("{},{}", heater_json, cpu_json);
+    log::info!("rest_response_tempareture_all(): {}", json.as_str());
+
+    Ok(json)
+}
+
+fn rest_response_status() -> Result<String, String>
+{
+    let (disp_errcode, disp_message) = match errcode() {
+        ErrorCode::None => (0, String::from("")),
+        ErrorCode::Heater1OverHeatError {errcode, message} => (errcode, message),
+        ErrorCode::Heater1ThermistorDisconnectError {errcode, message} => (errcode, message)
+    };
+
+    let json = format!("\"status\":{{\"state\":{},\"err_code\":{},\"message\":{}}}", 
+        current_status_string(current_status()),
+        disp_errcode,
+        disp_message
+    );
+    log::info!("rest_response_status(): {}", json.as_str());
+
+    Ok(json) 
+}
+
+fn rest_response_details() -> Result<String, String>
+{
+    let temp_json = rest_response_tempareture_all()?;
+    let status_json = rest_response_status()?;
+
+    let json = format!("{},{}", temp_json, status_json);
+    log::info!("rest_response_details(): {}", json.as_str());
+
+    Ok(json) 
+}
+
+fn get_tcp_state_string(state: embassy_net::tcp::State) -> String
 {
     match state {
         embassy_net::tcp::State::Closed => String::from("Closed"),
@@ -192,6 +241,16 @@ fn get_tcp_state_string(state: State) -> String
         embassy_net::tcp::State::Closing => String::from("Closing"),
         embassy_net::tcp::State::LastAck => String::from("LastAck"),
         embassy_net::tcp::State::TimeWait => String::from("TimeWait"),
+    }
+}
+
+fn current_status_string(state: State) -> String
+{
+    match state {
+        State::Initializing => String::from("Initializing"),
+        State::Heating => String::from("Heating"),
+        State::Saturating => String::from("Saturating"),
+        State::Error => String::from("Error"),
     }
 }
 

@@ -1,15 +1,11 @@
 use core::cell::RefCell;
-use core::str::from_utf8;
-use defmt::*;
 
 use embassy_time::{Duration, Timer};
 use embassy_rp::gpio::{Pin};
-use embassy_rp::adc::{Adc, Config, InterruptHandler};
+use embassy_rp::adc::{Adc};
 use embassy_rp::peripherals::{PIN_26, PIN_27};
-use alloc::string::{String, ToString};
 
 use embassy_sync::blocking_mutex::{Mutex, raw::ThreadModeRawMutex};
-use static_cell::StaticCell;
 
 
 pub struct ADCIo<'a, T1: Pin, T2: Pin>
@@ -483,7 +479,8 @@ impl Thermometer
 }
 
 #[embassy_executor::task]
-pub async fn thermometer_task(mut adcio: ADCIo<'static, PIN_26, PIN_27>) {
+pub async fn thermometer_task(mut adcio: ADCIo<'static, PIN_26, PIN_27>)
+{
 
     let mut heater1_temp = Thermometer::new(0.22);
     let mut heater2_temp = Thermometer::new(0.22);
@@ -491,7 +488,7 @@ pub async fn thermometer_task(mut adcio: ADCIo<'static, PIN_26, PIN_27>) {
     loop {
         let heater1_level = adcio.adc.read(&mut adcio.heater1).await;
         let heater1_current_temp = heater1_temp.calc_next(heater1_level);
-        //info!("Pin 31 ADC: {}", level);
+        //log::info!("Pin 31 ADC: {}", heater1_level);
         
         let heater2_level = adcio.adc.read(&mut adcio.heater2).await;
         let heater2_current_temp = heater2_temp.calc_next(heater2_level);
@@ -531,7 +528,8 @@ fn get_tempareture_from_table(adc_value: u16) -> f32
     (temp_a * (1.0 - alpha)) + (temp_b * alpha)
 }
 
-fn convert_to_celsius(raw_temp: u16) -> f32 {
+fn convert_to_celsius(raw_temp: u16) -> f32
+{
     // According to chapter 4.9.5. Temperature Sensor in RP2040 datasheet
     27.0 - (raw_temp as f32 * 3.3 / 4096.0 - 0.706) / 0.001721 as f32
 }

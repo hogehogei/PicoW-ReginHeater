@@ -15,9 +15,9 @@ use embassy_net::tcp::TcpSocket;
 use embassy_net::{Config, Stack, StackResources};
 use embassy_time::Timer;
 use embassy_time::Duration;
-use embassy_rp::gpio::{Level, Output, Pin};
+use embassy_rp::gpio::{Level, Output};
 use embassy_rp::bind_interrupts;
-use embassy_rp::peripherals::{DMA_CH0, PIN_23, PIN_25, PIN_26, PIN_27, PIO0, USB};
+use embassy_rp::peripherals::{DMA_CH0, PIN_23, PIN_25, PIO0, USB};
 use embassy_rp::usb::{Driver, InterruptHandler};
 use embassy_rp::adc::Adc;
 use embassy_rp::pio::Pio;
@@ -28,8 +28,15 @@ use {defmt_rtt as _, panic_probe as _};
 
 mod rest;
 mod thermometer;
+mod controller;
+mod led;
+mod gpio;
+mod util;
 use crate::rest::Rest;
 use crate::thermometer::*;
+use crate::controller::*;
+use crate::led::*;
+use crate::gpio::*;
 
 macro_rules! singleton {
     ($val:expr) => {{
@@ -43,16 +50,6 @@ bind_interrupts!(struct Irqs {
     USBCTRL_IRQ => InterruptHandler<USB>;
     ADC_IRQ_FIFO => embassy_rp::adc::InterruptHandler;
 });
-
-
-// Onboard LED Status
-#[derive(Copy, Clone)]
-enum LedStatus
-{
-    Stop,
-    Running,
-    Error,
-}
 
 //
 // static variables
@@ -84,45 +81,6 @@ async fn logger_task(driver: Driver<'static, USB>) {
     embassy_usb_logger::run!(1024, log::LevelFilter::Info, driver);
 }
 
-#[embassy_executor::task]
-async fn led_task(mut control: cyw43::Control<'static>) -> !
-{
-    let mut led : bool = false;
-    let mut ticks : u32 = 0;
-    let (mut blink_on, mut blink_ticks) : (bool, u32) = (false, 0);
-
-    loop {
-        if ticks <= 0 && led == false {
-            let led_status = LED_STATUS.lock(|lock| {
-                *(lock.borrow_mut())
-            });
-
-            (blink_on, blink_ticks) = match led_status {
-                LedStatus::Stop    => (false, 25),
-                LedStatus::Running => (true,  50),
-                LedStatus::Error   => (true,  25)
-            };
-
-            ticks = blink_ticks;
-            led = true;
-        }
-
-        if blink_on {
-            if ticks <= 0 && led == true {
-                led = false;
-                ticks = blink_ticks;
-            }
-        }
-        else {
-            led = false;
-        }
-
-        control.gpio_set(0, led).await;
-        Timer::after(Duration::from_millis(10)).await;
-        ticks -= 1;
-    }
-}
-
 #[embassy_executor::main]
 async fn main(spawner: Spawner)
 {
@@ -137,6 +95,9 @@ async fn main(spawner: Spawner)
     let usb_driver = Driver::new(p.USB, Irqs);
     spawner.spawn(logger_task(usb_driver)).unwrap();
 
+    // Set heater gpio
+    let heater_port = Output::new(p.PIN_6, Level::Low);
+    set_using_gpio_ports(heater_port);
     // Start thermomater(Heater, CPU)
     let mut adc = Adc::new(p.ADC, Irqs, embassy_rp::adc::Config::default());
     let mut adcio = ADCIo::new(adc, p.PIN_26, p.PIN_27);
@@ -198,11 +159,10 @@ async fn main(spawner: Spawner)
         }
     }
     
+    // Start Controller task
+    spawner.spawn(controller_task()).unwrap();
     // Start LED task
     spawner.spawn(led_task(control)).unwrap();
-    LED_STATUS.lock(|lock| {
-        *lock.borrow_mut() = LedStatus::Running;
-    });
 
     // And now we can use it!
     let mut rx_buffer = [0; 4096];
