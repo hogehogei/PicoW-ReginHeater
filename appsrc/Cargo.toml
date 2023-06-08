@@ -34,6 +34,9 @@ log = "0.4.14"
 
 httparse = { version = "1.8.0", default-features=false }
 
+[dependencies.num-traits]
+version = "0.2"
+default-features = false
 
 [patch.crates-io]
 embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy", rev = "1fdde8f03fc8b98c7fdb91a94e2dfd47bcbc24cb" }

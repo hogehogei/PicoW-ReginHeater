@@ -1,4 +1,5 @@
 use core::cell::RefCell;
+use num_traits::float::FloatCore;
 
 use embassy_time::{Duration, Timer};
 use embassy_rp::gpio::{Pin};
@@ -539,7 +540,8 @@ pub fn heater1_tempareture() -> f32
     let tempareture = HEATER1_TEMP.lock(|lock| {
         *(lock.borrow_mut())
     });
-    ((tempareture * 100.0 + 0.5) as u32) as f32 / 100.0
+    //((tempareture * 100.0 + 0.5) as u32) as f32 / 100.0
+    (tempareture * 100.0 + 0.5).round() / 100.0
 }
 
 pub fn heater2_tempareture() -> f32
@@ -547,7 +549,7 @@ pub fn heater2_tempareture() -> f32
     let tempareture = HEATER2_TEMP.lock(|lock| {
         *(lock.borrow_mut())
     });
-    ((tempareture * 100.0 + 0.5) as u32) as f32 / 100.0
+    (tempareture * 100.0 + 0.5).round() / 100.0
 }
 
 pub fn cpu_tempareture() -> f32
@@ -555,6 +557,6 @@ pub fn cpu_tempareture() -> f32
     let tempareture = CPU_TEMP.lock(|lock| {
         *(lock.borrow_mut())
     });
-    ((tempareture * 100.0 + 0.5) as u32) as f32 / 100.0
+    (tempareture * 100.0 + 0.5).round() / 100.0
 }
 

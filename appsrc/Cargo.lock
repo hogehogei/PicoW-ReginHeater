@@ -1178,6 +1178,7 @@ dependencies = [
  "heapless",
  "httparse",
  "log",
+ "num-traits",
  "panic-probe",
  "static_cell",
 ]
