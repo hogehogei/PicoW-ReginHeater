@@ -30,7 +30,7 @@ impl<'a, T1, T2> ADCIo<'a, T1, T2>
 
 struct Thermometer
 {
-    tempareture : f32,
+    temperature : f32,
     exp_mov_ave_alpha : f32,
 }
 
@@ -38,9 +38,9 @@ struct Thermometer
 // static const variables
 //
 
-// ADC -> celsius tempareture conversion table
+// ADC -> celsius temperature conversion table
 // 1000 = 10.00[Celsius]
-static TEMPARETURE_TABLE : [i16; 411] = [
+static temperature_TABLE : [i16; 411] = [
     -7300,
     -7300,
     -6440,
@@ -465,17 +465,17 @@ impl Thermometer
 {
     pub fn new(alpha: f32) -> Self {
         Self { 
-            tempareture: 0.0,
+            temperature: 0.0,
             exp_mov_ave_alpha: alpha
         }
     }
 
     pub fn calc_next(&mut self, adc_value: u16) -> f32
     {
-        let current_temp : f32 = get_tempareture_from_table(adc_value);
-        self.tempareture = (current_temp * self.exp_mov_ave_alpha) + ((1.0-self.exp_mov_ave_alpha) * self.tempareture);
+        let current_temp : f32 = get_temperature_from_table(adc_value);
+        self.temperature = (current_temp * self.exp_mov_ave_alpha) + ((1.0-self.exp_mov_ave_alpha) * self.temperature);
 
-        self.tempareture
+        self.temperature
     }
 }
 
@@ -512,20 +512,20 @@ pub async fn thermometer_task(mut adcio: ADCIo<'static, PIN_26, PIN_27>)
     }
 }
 
-fn get_tempareture_from_table(adc_value: u16) -> f32
+fn get_temperature_from_table(adc_value: u16) -> f32
 {
     // Clipping 12bit ADC range
     let v : usize = if adc_value < 4096 { adc_value } else { 4095 } as usize;
     
-    // Tempareture table has record that every tens digit.
+    // temperature table has record that every tens digit.
     // The temperature corresponding to one digit of ADC is linearly interpolated.
     let adc_a: usize = (v / 10) as usize;
 
-    let temp_a : f32 = TEMPARETURE_TABLE[adc_a] as f32 / 100.0;
-    let temp_b : f32 = TEMPARETURE_TABLE[adc_a + 1] as f32 / 100.0;
-    let alpha : f32 = (v - adc_a) as f32 / 10.0;
+    let temp_a : f32 = temperature_TABLE[adc_a] as f32 / 100.0;
+    let temp_b : f32 = temperature_TABLE[adc_a + 1] as f32 / 100.0;
+    let alpha : f32 = (v % 10) as f32 / 10.0;
     
-    // Return tempareture
+    // Return temperature
     (temp_a * (1.0 - alpha)) + (temp_b * alpha)
 }
 
@@ -535,28 +535,27 @@ fn convert_to_celsius(raw_temp: u16) -> f32
     27.0 - (raw_temp as f32 * 3.3 / 4096.0 - 0.706) / 0.001721 as f32
 }
 
-pub fn heater1_tempareture() -> f32
+pub fn heater1_temperature() -> f32
 {
-    let tempareture = HEATER1_TEMP.lock(|lock| {
+    let temperature = HEATER1_TEMP.lock(|lock| {
         *(lock.borrow_mut())
     });
-    //((tempareture * 100.0 + 0.5) as u32) as f32 / 100.0
-    (tempareture * 100.0 + 0.5).round() / 100.0
+    (temperature * 100.0 + 0.5).round() / 100.0
 }
 
-pub fn heater2_tempareture() -> f32
+pub fn heater2_temperature() -> f32
 {
-    let tempareture = HEATER2_TEMP.lock(|lock| {
+    let temperature = HEATER2_TEMP.lock(|lock| {
         *(lock.borrow_mut())
     });
-    (tempareture * 100.0 + 0.5).round() / 100.0
+    (temperature * 100.0 + 0.5).round() / 100.0
 }
 
-pub fn cpu_tempareture() -> f32
+pub fn cpu_temperature() -> f32
 {
-    let tempareture = CPU_TEMP.lock(|lock| {
+    let temperature = CPU_TEMP.lock(|lock| {
         *(lock.borrow_mut())
     });
-    (tempareture * 100.0 + 0.5).round() / 100.0
+    (temperature * 100.0 + 0.5).round() / 100.0
 }
 

@@ -42,10 +42,10 @@ impl HeaterControl
         }
     }
 
-    pub fn control(&mut self, tempareture: f32)
+    pub fn control(&mut self, temperature: f32)
     {
-        self.detect_heater_on(tempareture);
-        self.detect_heater_off(tempareture);
+        self.detect_heater_on(temperature);
+        self.detect_heater_off(temperature);
     }
 
     pub fn is_on(&self) -> bool 
@@ -53,20 +53,20 @@ impl HeaterControl
         self.heater_is_on
     }
 
-    fn detect_heater_on(&mut self, tempareture: f32)
+    fn detect_heater_on(&mut self, temperature: f32)
     {
         if self.heater_is_on == false {
-            if self.heater_on_cnt.count( tempareture < 34.0 ).is_reach_limit() {
+            if self.heater_on_cnt.count( temperature < 34.0 ).is_reach_limit() {
                 self.heater_on();
                 self.heater_on_cnt.reset();
             }
         }
     }
 
-    fn detect_heater_off(&mut self, tempareture: f32)
+    fn detect_heater_off(&mut self, temperature: f32)
     {
         if self.heater_is_on == true {
-            if self.heater_off_cnt.count( tempareture >= 35.0 ).is_reach_limit() {
+            if self.heater_off_cnt.count( temperature >= 35.0 ).is_reach_limit() {
                 self.heater_off();
                 self.heater_off_cnt.reset();
             }
@@ -112,7 +112,7 @@ impl ErrorDetector
 
     pub fn heater_overheat(&mut self)
     {
-        let heater1_temp = heater1_tempareture();
+        let heater1_temp = heater1_temperature();
 
         if self.heater_overheat.count( heater1_temp >= 45.0 ).is_reach_limit() {
             self.detected_error = ErrorCode::Heater1OverHeatError{ errcode: 1, message: String::from("Heater1 overheat error.") };
@@ -121,7 +121,7 @@ impl ErrorDetector
 
     pub fn heater_thermistor_disconnect(&mut self)
     {
-        let heater1_temp = heater1_tempareture();
+        let heater1_temp = heater1_temperature();
 
         if self.heater_thermistor_disconnect.count( heater1_temp < -10.0 ).is_reach_limit() {
             self.detected_error = ErrorCode::Heater1ThermistorDisconnectError{ errcode: 2, message: String::from("Heater1 thermistor disconnected error.") };
@@ -181,7 +181,7 @@ fn control_sequence(mut heater_controller: &mut HeaterControl)
 
 fn heater_control(mut heater_controller: &mut HeaterControl) -> State
 {
-    let heater1_temp = heater1_tempareture();
+    let heater1_temp = heater1_temperature();
     heater_controller.control( heater1_temp );
 
     if heater_controller.is_on() {

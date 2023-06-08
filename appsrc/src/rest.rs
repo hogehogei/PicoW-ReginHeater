@@ -149,14 +149,14 @@ fn response_get<'a>(request: &httparse::Request<'a, 'a>) -> Result<String, Strin
     let path = request.path.ok_or("HTTP request path not found.")?;
 
     match path {
-        "/tempareture/heater" => {
-            rest_response_tempareture_heater()
+        "/temperature/heater" => {
+            rest_response_temperature_heater()
         }
-        "/tempareture/cpu" => {
-            rest_response_tempareture_cpu()
+        "/temperature/cpu" => {
+            rest_response_temperature_cpu()
         }
-        "/tempareture/all" => {
-            rest_response_tempareture_all()
+        "/temperature/all" => {
+            rest_response_temperature_all()
         }
         "/status" => {
             rest_response_status()
@@ -170,30 +170,30 @@ fn response_get<'a>(request: &httparse::Request<'a, 'a>) -> Result<String, Strin
     }
 }
 
-fn rest_response_tempareture_heater() -> Result<String, String>
+fn rest_response_temperature_heater() -> Result<String, String>
 {
-    let tempareture = heater1_tempareture();
-    let json = format!("\"heater_temp\":[{:.2}]", tempareture);
-    log::info!("rest_response_tempareture_heater: {}", json.as_str());
+    let temperature = heater1_temperature();
+    let json = format!("\"heater_temp\":[{:.2}]", temperature);
+    log::info!("rest_response_temperature_heater: {}", json.as_str());
 
     Ok(json)
 }
 
-fn rest_response_tempareture_cpu() -> Result<String, String>
+fn rest_response_temperature_cpu() -> Result<String, String>
 {
-    let json = format!("\"cpu_temp\":[{:.2}]", cpu_tempareture());
-    log::info!("rest_response_tempareture_cpu(): {}", json.as_str());
+    let json = format!("\"cpu_temp\":[{:.2}]", cpu_temperature());
+    log::info!("rest_response_temperature_cpu(): {}", json.as_str());
 
     Ok(json)
 }
 
-fn rest_response_tempareture_all() -> Result<String, String>
+fn rest_response_temperature_all() -> Result<String, String>
 {
-    let heater_json = rest_response_tempareture_heater()?;
-    let cpu_json = rest_response_tempareture_cpu()?;
+    let heater_json = rest_response_temperature_heater()?;
+    let cpu_json = rest_response_temperature_cpu()?;
 
     let json = format!("{},{}", heater_json, cpu_json);
-    log::info!("rest_response_tempareture_all(): {}", json.as_str());
+    log::info!("rest_response_temperature_all(): {}", json.as_str());
 
     Ok(json)
 }
@@ -218,7 +218,7 @@ fn rest_response_status() -> Result<String, String>
 
 fn rest_response_details() -> Result<String, String>
 {
-    let temp_json = rest_response_tempareture_all()?;
+    let temp_json = rest_response_temperature_all()?;
     let status_json = rest_response_status()?;
 
     let json = format!("{},{}", temp_json, status_json);
