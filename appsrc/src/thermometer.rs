@@ -1,7 +1,7 @@
 use core::cell::RefCell;
 use num_traits::float::FloatCore;
 
-use embassy_time::{Duration, Timer};
+use embassy_time::{Duration, Ticker};
 use embassy_rp::gpio::{Pin};
 use embassy_rp::adc::{Adc};
 use embassy_rp::peripherals::{PIN_26, PIN_27};
@@ -40,7 +40,7 @@ struct Thermometer
 
 // ADC -> celsius temperature conversion table
 // 1000 = 10.00[Celsius]
-static temperature_TABLE : [i16; 411] = [
+static TEMPERATURE_TABLE : [i16; 411] = [
     -7300,
     -7300,
     -6440,
@@ -485,6 +485,7 @@ pub async fn thermometer_task(mut adcio: ADCIo<'static, PIN_26, PIN_27>)
 
     let mut heater1_temp = Thermometer::new(0.22);
     let mut heater2_temp = Thermometer::new(0.22);
+    let mut ticker = Ticker::every(Duration::from_millis(20));
 
     loop {
         let heater1_level = adcio.adc.read(&mut adcio.heater1).await;
@@ -508,7 +509,7 @@ pub async fn thermometer_task(mut adcio: ADCIo<'static, PIN_26, PIN_27>)
             *lock.borrow_mut() = convert_to_celsius(cputemp);
         });
 
-        Timer::after(Duration::from_millis(20)).await;
+        ticker.next().await;
     }
 }
 
@@ -521,8 +522,8 @@ fn get_temperature_from_table(adc_value: u16) -> f32
     // The temperature corresponding to one digit of ADC is linearly interpolated.
     let adc_a: usize = (v / 10) as usize;
 
-    let temp_a : f32 = temperature_TABLE[adc_a] as f32 / 100.0;
-    let temp_b : f32 = temperature_TABLE[adc_a + 1] as f32 / 100.0;
+    let temp_a : f32 = TEMPERATURE_TABLE[adc_a] as f32 / 100.0;
+    let temp_b : f32 = TEMPERATURE_TABLE[adc_a + 1] as f32 / 100.0;
     let alpha : f32 = (v % 10) as f32 / 10.0;
     
     // Return temperature

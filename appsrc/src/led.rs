@@ -1,6 +1,6 @@
 use core::cell::RefCell;
 
-use embassy_time::{Duration, Timer};
+use embassy_time::{Duration, Ticker};
 use embassy_sync::blocking_mutex::{Mutex, raw::ThreadModeRawMutex};
 
 // Onboard LED Status
@@ -24,6 +24,7 @@ pub async fn led_task(mut control: cyw43::Control<'static>) -> !
     let mut led : bool = false;
     let mut ticks : u32 = 0;
     let (mut blink_on, mut blink_ticks) : (bool, u32) = (false, 0);
+    let mut ticker = Ticker::every(Duration::from_millis(10));
 
     loop {
         if ticks <= 0 && led == false {
@@ -38,7 +39,7 @@ pub async fn led_task(mut control: cyw43::Control<'static>) -> !
                 LedStatus::Stop       => (false, 25),
                 LedStatus::Heating    => (true,  50),
                 LedStatus::Saturating => (true, 100),
-                LedStatus::Error      => (true,  25),
+                LedStatus::Error      => (true,  10),
             };
 
             ticks = blink_ticks;
@@ -56,7 +57,7 @@ pub async fn led_task(mut control: cyw43::Control<'static>) -> !
         }
 
         control.gpio_set(0, led).await;
-        Timer::after(Duration::from_millis(10)).await;
+        ticker.next().await;
         ticks -= 1;
     }
 }

@@ -6,22 +6,18 @@
 #[macro_use]
 extern crate alloc;
 
-use core::cell::RefCell;
 use core::mem::MaybeUninit;
 
 use cyw43_pio::PioSpi;
 use embassy_executor::Spawner;
 use embassy_net::tcp::TcpSocket;
 use embassy_net::{Config, Stack, StackResources};
-use embassy_time::Timer;
-use embassy_time::Duration;
 use embassy_rp::gpio::{Level, Output};
 use embassy_rp::bind_interrupts;
 use embassy_rp::peripherals::{DMA_CH0, PIN_23, PIN_25, PIO0, USB};
 use embassy_rp::usb::{Driver, InterruptHandler};
 use embassy_rp::adc::Adc;
 use embassy_rp::pio::Pio;
-use embassy_sync::blocking_mutex::{Mutex, raw::ThreadModeRawMutex};
 use embedded_alloc::Heap;
 use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
@@ -54,8 +50,6 @@ bind_interrupts!(struct Irqs {
 //
 // static variables
 //
-static LED_STATUS : Mutex<ThreadModeRawMutex, RefCell<LedStatus>> = Mutex::new(RefCell::new(LedStatus::Stop));
-
 const HEAP_SIZE : usize = 1024 * 32;     // 32KiB 
 static mut HEAP_MEM : [MaybeUninit<u8>; HEAP_SIZE] = [MaybeUninit::uninit(); HEAP_SIZE];
 #[global_allocator]
@@ -99,8 +93,8 @@ async fn main(spawner: Spawner)
     let heater_port = Output::new(p.PIN_6, Level::Low);
     set_using_gpio_ports(heater_port);
     // Start thermomater(Heater, CPU)
-    let mut adc = Adc::new(p.ADC, Irqs, embassy_rp::adc::Config::default());
-    let mut adcio = ADCIo::new(adc, p.PIN_26, p.PIN_27);
+    let adc = Adc::new(p.ADC, Irqs, embassy_rp::adc::Config::default());
+    let adcio = ADCIo::new(adc, p.PIN_26, p.PIN_27);
     spawner.spawn(thermometer_task(adcio)).unwrap();
 
     log::info!("Hello World!");
@@ -169,7 +163,7 @@ async fn main(spawner: Spawner)
     let mut tx_buffer = [0; 4096];
 
     loop {
-        let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
+        let socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
         let mut server = Rest::new(socket);
 
         if let Err(s) = server.accept().await {

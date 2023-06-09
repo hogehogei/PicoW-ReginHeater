@@ -1,5 +1,4 @@
 use core::str::from_utf8;
-use defmt::*;
 
 use embassy_time::Timer;
 use embassy_time::Duration;

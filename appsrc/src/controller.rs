@@ -1,7 +1,7 @@
 use core::cell::RefCell;
 use core::ops::{Deref, DerefMut};
 
-use embassy_time::{Duration, Timer};
+use embassy_time::{Duration, Ticker};
 use alloc::string::{String};
 
 use embassy_sync::blocking_mutex::{Mutex, raw::ThreadModeRawMutex};
@@ -142,7 +142,8 @@ pub async fn controller_task()
     ERROR_DETECTOR.lock(|lock| {
         *(lock.borrow_mut()) = Some(ErrorDetector::new());
     });
-    
+    let mut ticker = Ticker::every(Duration::from_millis(50));
+
     loop {
         // input/decision process 
         control_sequence(&mut heater_controller);
@@ -151,7 +152,7 @@ pub async fn controller_task()
         // output process
         set_led_status();
 
-        Timer::after(Duration::from_millis(50)).await;
+        ticker.next().await;
     }
 }
 
@@ -159,7 +160,7 @@ fn control_sequence(mut heater_controller: &mut HeaterControl)
 {
     CTRL_SEQ.lock( |lock| {
         let mut state = lock.borrow_mut();
-        let mut next_state = State::Initializing;
+        let next_state;
         match *state {
             State::Initializing => {
                 next_state = heater_control(&mut heater_controller);
@@ -179,7 +180,7 @@ fn control_sequence(mut heater_controller: &mut HeaterControl)
     });
 }
 
-fn heater_control(mut heater_controller: &mut HeaterControl) -> State
+fn heater_control(heater_controller: &mut HeaterControl) -> State
 {
     let heater1_temp = heater1_temperature();
     heater_controller.control( heater1_temp );

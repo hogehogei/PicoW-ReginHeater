@@ -1,5 +1,5 @@
 use core::cell::RefCell;
-use core::ops::{Deref, DerefMut};
+use core::ops::{DerefMut};
 
 use embassy_rp::gpio;
 use gpio::{Output};
