@@ -128,9 +128,22 @@ async fn create_rest_response(buf: &[u8]) -> Result<Option<String>, String>
 
     response(&request).map(
         |json| {
-            Some(format!("HTTP/1.1 200 OK\r\n\r\n{{{}}}", json))
+            let body = format!("{{{}}}", json);
+            let header = create_header_text(body.len());
+            Some(format!("HTTP/1.1 200 OK\r\n{}\r\n{}", header, body))
         }
     )
+}
+
+fn create_header_text(content_length: usize) -> String
+{
+    let content_length = format!("content-length: {}", content_length);
+    let content_type = "content-type: application/json; charset=utf-8";
+    //let vary = "vary: Origin, Access-Control-Request-Method, Access-Control-Request-Headers";
+    //let access_control = "access-control-allow-credentials: true";
+    let access_control_origin = "Access-Control-Allow-Origin: *";
+
+    return format!("{}\r\n{}\r\n{}\r\n", content_length, content_type, access_control_origin)
 }
 
 fn response<'a>(request: &httparse::Request<'a, 'a>) -> Result<String, String>
@@ -205,7 +218,7 @@ fn rest_response_status() -> Result<String, String>
         ErrorCode::Heater1ThermistorDisconnectError {errcode, message} => (errcode, message)
     };
 
-    let json = format!("\"status\":{{\"state\":{},\"err_code\":{},\"message\":{}}}", 
+    let json = format!("\"status\":{{\"state\":\"{}\",\"err_code\":{},\"message\":\"{}\"}}", 
         current_status_string(current_status()),
         disp_errcode,
         disp_message
