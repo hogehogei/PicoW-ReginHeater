@@ -1,0 +1,10 @@
+.GraphContainer {
+  display: flex;
+  justify-content: center;
+}
+
+.Graph {
+  width : 80%;
+  height : 60%;
+}
+

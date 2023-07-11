@@ -1,3 +1,9 @@
 appsrc/target/*
 appsrc/memory.map
 appsrc/setup_wifi.bat
+test/rest/target/*
+monitor_tool/graph/.next
+monitor_tool/graph/import/chartjs-adapter-luxon
+monitor_tool/graph/node_modules
+monitor_tool/graph/public
+
