@@ -1,4 +1,4 @@
-import { he } from 'date-fns/locale';
+//import { he } from 'date-fns/locale';
 import React from 'react';
 import { Line } from 'react-chartjs-2'
 import styles from 'styles/temperature_graph.module.css'
@@ -49,7 +49,12 @@ export default function TemperatureGraph() {
 }
 
 async function refreshGraph(chart) {
-  let [cpu_temp, heater_temp] = await getTemperature();
+  let temperature = await getTemperature();
+  if( temperature == null ){
+    return;
+  }
+
+  let [cpu_temp, heater_temp] = temperature;
   //console.log('cputemp:%d, heatertemp:%d', cpu_temp, heater_temp);
   
   let date = Date.now();
@@ -65,8 +70,22 @@ async function refreshGraph(chart) {
 
 async function getTemperature()
 {
-  const res = await fetch('http://192.168.24.107/details');
-  const json = await res.json();
+  const json = await fetch('http://192.168.24.107/details')
+  .then( response => {
+    if( response.ok ){
+      return response.json();
+    }
+    else {
+      return null;
+    }
+  })
+  .catch(error => {
+    console.error('通信に失敗しました', error);
+  });
 
-  return [json.cpu_temp[0], json.heater_temp[0]];
+  if( json != null ){
+    return [json.cpu_temp[0], json.heater_temp[0]];
+  }
+
+  return null;
 }
