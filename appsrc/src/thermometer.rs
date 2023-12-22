@@ -484,7 +484,7 @@ pub async fn thermometer_task(mut adcio: ADCIo<'static, PIN_26, PIN_27>)
 {
 
     let mut heater1_temp = Thermometer::new(0.22);
-    let mut heater2_temp = Thermometer::new(0.22);
+    //let mut heater2_temp = Thermometer::new(0.22);
     let mut ticker = Ticker::every(Duration::from_millis(20));
 
     loop {
@@ -492,8 +492,8 @@ pub async fn thermometer_task(mut adcio: ADCIo<'static, PIN_26, PIN_27>)
         let heater1_current_temp = heater1_temp.calc_next(heater1_level);
         //log::info!("Pin 31 ADC: {}", heater1_level);
         
-        let heater2_level = adcio.adc.read(&mut adcio.heater2).await;
-        let heater2_current_temp = heater2_temp.calc_next(heater2_level);
+        //let heater2_level = adcio.adc.read(&mut adcio.heater2).await;
+        //let heater2_current_temp = heater2_temp.calc_next(heater2_level);
         //info!("Pin 32 ADC: {}", level);
         
         let cputemp = adcio.adc.read_temperature().await;
@@ -502,9 +502,9 @@ pub async fn thermometer_task(mut adcio: ADCIo<'static, PIN_26, PIN_27>)
         HEATER1_TEMP.lock(|lock| {
             *lock.borrow_mut() = heater1_current_temp
         });
-        HEATER2_TEMP.lock(|lock| {
-            *lock.borrow_mut() = heater2_current_temp
-        });
+        // HEATER2_TEMP.lock(|lock| {
+        //    *lock.borrow_mut() = heater2_current_temp
+        //});
         CPU_TEMP.lock(|lock| {
             *lock.borrow_mut() = convert_to_celsius(cputemp);
         });
@@ -544,6 +544,7 @@ pub fn heater1_temperature() -> f32
     (temperature * 100.0 + 0.5).round() / 100.0
 }
 
+/*
 pub fn heater2_temperature() -> f32
 {
     let temperature = HEATER2_TEMP.lock(|lock| {
@@ -551,6 +552,7 @@ pub fn heater2_temperature() -> f32
     });
     (temperature * 100.0 + 0.5).round() / 100.0
 }
+*/
 
 pub fn cpu_temperature() -> f32
 {

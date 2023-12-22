@@ -86,8 +86,8 @@ async fn main(spawner: Spawner)
     let p = embassy_rp::init(Default::default());
 
     // Start USB logger task
-    let usb_driver = Driver::new(p.USB, Irqs);
-    spawner.spawn(logger_task(usb_driver)).unwrap();
+    //let usb_driver = Driver::new(p.USB, Irqs);
+    //spawner.spawn(logger_task(usb_driver)).unwrap();
 
     // Set heater gpio
     let heater_port = Output::new(p.PIN_6, Level::Low);
@@ -122,6 +122,7 @@ async fn main(spawner: Spawner)
     control
         .set_power_management(cyw43::PowerManagementMode::PowerSave)
         .await;
+    control.gpio_set(0, true).await;
 
     let config = Config::Dhcp(Default::default());
     //let config = embassy_net::Config::Static(embassy_net::Config {

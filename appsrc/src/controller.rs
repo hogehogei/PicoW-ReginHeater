@@ -15,6 +15,20 @@ use crate::util::*;
 static ERROR_DETECTOR : Mutex<ThreadModeRawMutex, RefCell<Option<ErrorDetector>>> = Mutex::new(RefCell::new(None));
 static CTRL_SEQ:  Mutex<ThreadModeRawMutex, RefCell<State>> = Mutex::new(RefCell::new(State::Initializing));
 
+// Control heater 
+const HEATER_CONTROL_TASK_TICK_MS : u32 = 50;
+const HEATER_ON_DETECT_TIME_MS : u32 = 5000;
+const HEATER_OFF_DETECT_TIME_MS : u32 = 1000;
+const HEATER_ON_THRESHOLD_CELCIUS : f32 = 34.0;
+const HEATER_OFF_THRESHOLD_CELCIUS : f32 = 35.0;
+
+// Detect Error
+const ERROR_OVERHEAT_DETECT_TIME_MS : u32 = 2000;
+const ERROR_CTH_DISCONNECT_DETECT_TIME_MS : u32 = 1000;
+const ERROR_OVERHEAT_THRESHOLD_CELCIUS : f32 = 45.0;
+const ERROR_CTH_DISCONNECT_THRESHOLD_CELCIUS : f32 = -10.0;
+
+
 #[derive(Copy, Clone)]
 pub enum State
 {
@@ -37,8 +51,8 @@ impl HeaterControl
     {
         Self {
             heater_is_on:   false, 
-            heater_on_cnt:  Counter::new(100),
-            heater_off_cnt: Counter::new(20)
+            heater_on_cnt:  Counter::new(HEATER_ON_DETECT_TIME_MS / HEATER_CONTROL_TASK_TICK_MS),  // 50ms * 100 = 5000ms
+            heater_off_cnt: Counter::new(HEATER_OFF_DETECT_TIME_MS / HEATER_CONTROL_TASK_TICK_MS)  // 50ms *  20 = 1000ms
         }
     }
 
@@ -56,7 +70,7 @@ impl HeaterControl
     fn detect_heater_on(&mut self, temperature: f32)
     {
         if self.heater_is_on == false {
-            if self.heater_on_cnt.count( temperature < 34.0 ).is_reach_limit() {
+            if self.heater_on_cnt.count( temperature < HEATER_ON_THRESHOLD_CELCIUS ).is_reach_limit() {
                 self.heater_on();
                 self.heater_on_cnt.reset();
             }
@@ -66,7 +80,7 @@ impl HeaterControl
     fn detect_heater_off(&mut self, temperature: f32)
     {
         if self.heater_is_on == true {
-            if self.heater_off_cnt.count( temperature >= 35.0 ).is_reach_limit() {
+            if self.heater_off_cnt.count( temperature >= HEATER_OFF_THRESHOLD_CELCIUS ).is_reach_limit() {
                 self.heater_off();
                 self.heater_off_cnt.reset();
             }
@@ -104,8 +118,8 @@ impl ErrorDetector
     pub fn new() -> Self
     {
         Self {
-            heater_overheat: Counter::new(100),
-            heater_thermistor_disconnect: Counter::new(20),
+            heater_overheat: Counter::new(ERROR_OVERHEAT_DETECT_TIME_MS / HEATER_CONTROL_TASK_TICK_MS),                    // 50ms * 100 = 5000ms
+            heater_thermistor_disconnect: Counter::new(ERROR_CTH_DISCONNECT_DETECT_TIME_MS / HEATER_CONTROL_TASK_TICK_MS), // 50ms * 20  = 1000ms
             detected_error: ErrorCode::None,
         }
     }
@@ -114,7 +128,7 @@ impl ErrorDetector
     {
         let heater1_temp = heater1_temperature();
 
-        if self.heater_overheat.count( heater1_temp >= 45.0 ).is_reach_limit() {
+        if self.heater_overheat.count( heater1_temp >= ERROR_OVERHEAT_THRESHOLD_CELCIUS ).is_reach_limit() {
             self.detected_error = ErrorCode::Heater1OverHeatError{ errcode: 1, message: String::from("Heater1 overheat error.") };
         }
     }
@@ -123,7 +137,7 @@ impl ErrorDetector
     {
         let heater1_temp = heater1_temperature();
 
-        if self.heater_thermistor_disconnect.count( heater1_temp < -10.0 ).is_reach_limit() {
+        if self.heater_thermistor_disconnect.count( heater1_temp < ERROR_CTH_DISCONNECT_THRESHOLD_CELCIUS ).is_reach_limit() {
             self.detected_error = ErrorCode::Heater1ThermistorDisconnectError{ errcode: 2, message: String::from("Heater1 thermistor disconnected error.") };
         }
     }
@@ -142,7 +156,7 @@ pub async fn controller_task()
     ERROR_DETECTOR.lock(|lock| {
         *(lock.borrow_mut()) = Some(ErrorDetector::new());
     });
-    let mut ticker = Ticker::every(Duration::from_millis(50));
+    let mut ticker = Ticker::every(Duration::from_millis(HEATER_CONTROL_TASK_TICK_MS as u64));
 
     loop {
         // input/decision process 
