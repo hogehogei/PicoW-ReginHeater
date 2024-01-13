@@ -72,7 +72,14 @@ async fn net_task(stack: &'static Stack<cyw43::NetDriver<'static>>) -> ! {
 
 #[embassy_executor::task]
 async fn logger_task(driver: Driver<'static, USB>) {
-    embassy_usb_logger::run!(1024, log::LevelFilter::Info, driver);
+    //embassy_usb_logger::run!(1024, log::LevelFilter::Info, driver);
+
+    // above macro will cause compile error when using crate "log = 0.4.20", expand macro manually
+    static LOGGER: ::embassy_usb_logger::UsbLogger<1024> = ::embassy_usb_logger::UsbLogger::new();
+    unsafe {
+        let _ = ::log::set_logger_racy(&LOGGER).map(|()| log::set_max_level_racy(log::LevelFilter::Info));
+    }
+    let _ = LOGGER.run(&mut ::embassy_usb_logger::LoggerState::new(), driver).await;
 }
 
 #[embassy_executor::main]
